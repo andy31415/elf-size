@@ -1,4 +1,4 @@
-use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
+use comfy_table::{Attribute, Cell, CellAlignment, ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
 use eyre::{Context, Result};
 use std::io::Write;
 
@@ -60,7 +60,7 @@ pub fn generate_report<W: Write>(
                 };
                 table.add_row(vec![
                     Cell::new(&diff.change_type.to_string()),
-                    Cell::new(&diff.size_diff.to_string()),
+                    Cell::new(&diff.size_diff.to_string()).set_alignment(CellAlignment::Right),
                     Cell::new(&symbol_name),
                 ]);
             }

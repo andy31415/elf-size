@@ -1,5 +1,5 @@
+use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
 use eyre::{Context, Result};
-use prettytable::{Cell, Row, Table, format, row};
 use std::io::Write;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -38,8 +38,14 @@ pub fn generate_report<W: Write>(
     match output_type {
         OutputType::Table => {
             let mut table = Table::new();
-            table.set_format(*format::consts::FORMAT_CLEAN);
-            table.add_row(row!["Type", "Size Diff", "Symbol"]);
+            table
+                .load_preset(UTF8_FULL_CONDENSED)
+                .set_header(vec![
+                    Cell::new("Type").add_attribute(Attribute::Bold),
+                    Cell::new("Size Diff").add_attribute(Attribute::Bold),
+                    Cell::new("Symbol").add_attribute(Attribute::Bold),
+                ])
+                .set_content_arrangement(ContentArrangement::Dynamic);
 
             for diff in diffs {
                 let symbol_name = match max_symbol_width {
@@ -52,13 +58,13 @@ pub fn generate_report<W: Write>(
                     }
                     _ => diff.name.clone(),
                 };
-                table.add_row(Row::new(vec![
+                table.add_row(vec![
                     Cell::new(&diff.change_type.to_string()),
                     Cell::new(&diff.size_diff.to_string()),
                     Cell::new(&symbol_name),
-                ]));
+                ]);
             }
-            table.print(writer).context("Failed to print table")?;
+            writeln!(writer, "{}", table).context("Failed to print table")?;
         }
         OutputType::Csv => {
             let mut wtr = csv::Writer::from_writer(writer);

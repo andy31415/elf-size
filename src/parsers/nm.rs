@@ -50,6 +50,9 @@ impl ElfParser for NmParser {
                 continue;
             }
 
+            let address: u64 = parts[0]
+                .parse()
+                .map_err(|e| format!("Failed to parse address from line {}: {}", line, e))?;
             let size: u64 = parts[1]
                 .parse()
                 .map_err(|e| format!("Failed to parse size from line {}: {}", line, e))?;
@@ -70,6 +73,7 @@ impl ElfParser for NmParser {
                 name,
                 size: size as usize,
                 kind,
+                address,
             });
         }
 

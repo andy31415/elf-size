@@ -26,6 +26,7 @@ impl ElfParser for GoblinParser {
                 name: crate::parsers::demangle::_demangle_symbol_name(&name),
                 size: sym.st_size as usize,
                 kind,
+                address: sym.st_value,
             });
         }
 

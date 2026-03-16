@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand};
 use eyre::Result;
+use object::{Object, Architecture};
 use std::collections::HashMap;
+use std::fs;
 use std::io;
 use std::path::PathBuf;
 use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::FmtSubscriber;
 
 mod parsers;
 mod report;
@@ -14,7 +16,8 @@ use crate::parsers::{
     create_parser,
     definitions::{Symbol, SymbolKind},
 };
-use report::{OutputType, ReportData, SymbolDiff, generate_report};
+use regex::Regex;
+use report::{generate_report, OutputType, ReportData, SymbolDiff};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -69,6 +72,18 @@ enum Commands {
         /// Symbols to show disassembly for
         #[arg(index = 2, num_args = 1..)]
         symbols: Vec<String>,
+
+        /// Demangle symbol names
+        #[arg(short, long, default_value_t = true)]
+        demangle: bool,
+
+        /// Parser to use
+        #[arg(short, long, default_value = "native")]
+        parser: String,
+
+        /// Path to the objdump binary to use
+        #[arg(long, default_value = "objdump")]
+        objdump: String,
     },
 }
 
@@ -122,7 +137,13 @@ fn main() -> Result<()> {
             &parser,
             max_symbol_width,
         ),
-        Commands::Show { elf_file, symbols } => run_show(elf_file, symbols),
+        Commands::Show {
+            elf_file,
+            symbols,
+            demangle,
+            parser,
+            objdump,
+        } => run_show(elf_file, symbols, demangle, &parser, &objdump),
     }
 }
 
@@ -249,11 +270,118 @@ fn run_diff(
     diffs
 }
 
-fn run_show(elf_file: PathBuf, symbols: Vec<String>) -> Result<()> {
-    println!(
-        "Showing disassembly for {:?} in file {:?}",
-        symbols, elf_file
-    );
-    // TODO: Implement disassembly logic
+fn get_arch_default_objdump(elf_file: &PathBuf) -> Result<String> {
+    let bin_data = fs::read(elf_file)?;
+    let obj_file = object::File::parse(&*bin_data)
+        .map_err(|e| eyre::eyre!("Failed to parse ELF file {}: {}", elf_file.display(), e))?;
+    let arch = obj_file.architecture();
+    let default_objdump = match arch {
+        Architecture::Arm | Architecture::Aarch64 => "arm-none-eabi-objdump".to_string(),
+        Architecture::X86_64 | Architecture::I386 => "objdump".to_string(),
+        // Add more architectures as needed
+        _ => {
+            tracing::warn!("Unsupported architecture {:?} for objdump auto-detection, defaulting to 'objdump'", arch);
+            "objdump".to_string()
+        }
+    };
+    Ok(default_objdump)
+}
+
+fn run_show(
+    elf_file: PathBuf,
+    symbols: Vec<String>,
+    demangle: bool,
+    parser_name: &str,
+    objdump_path: &str,
+) -> Result<()> {
+    let chosen_objdump = if objdump_path == "objdump" {
+        match get_arch_default_objdump(&elf_file) {
+            Ok(default_cmd) => default_cmd,
+            Err(e) => {
+                tracing::warn!("Failed to auto-detect objdump, falling back to 'objdump': {}", e);
+                "objdump".to_string()
+            }
+        }
+    } else {
+        objdump_path.to_string()
+    };
+    tracing::info!("Using objdump command: {}", chosen_objdump);
+
+    let parser = create_parser(parser_name, &elf_file)?;
+    let elf_path_str = elf_file
+        .to_str()
+        .ok_or_else(|| eyre::eyre!("ELF file path is not valid UTF-8: {}", elf_file.display()))?;
+    let mut elf_symbols = parser
+        .get_symbols(elf_path_str)
+        .map_err(|e| eyre::eyre!(e))?;
+    if demangle {
+        elf_symbols.iter_mut().for_each(|s| s.demangle());
+    }
+    tracing::info!("Loaded {} symbols from {}", elf_symbols.len(), elf_path_str);
+
+    for pattern in symbols {
+        println!("\n--- Matching symbols for pattern: {} ---", pattern);
+        let regex = match Regex::new(&pattern) {
+            Ok(r) => r,
+            Err(e) => {
+                println!("Invalid regex '{}': {}", pattern, e);
+                continue;
+            }
+        };
+
+        let matches: Vec<&Symbol> = elf_symbols
+            .iter()
+            .filter(|s| regex.is_match(&s.name))
+            .collect();
+
+        match matches.len() {
+            0 => println!("No symbols found matching pattern '{}'.", pattern),
+            1 => {
+                let symbol = matches[0];
+                println!("Found unique match: {}", symbol.name);
+                if symbol.kind != SymbolKind::Code {
+                    println!(
+                        "Symbol '{}' is not a code symbol (kind: {:?}), skipping disassembly.",
+                        symbol.name, symbol.kind
+                    );
+                    continue;
+                }
+                if symbol.size == 0 {
+                    println!(
+                        "Symbol '{}' has zero size, skipping disassembly.",
+                        symbol.name
+                    );
+                    continue;
+                }
+                let start_addr = symbol.address;
+                let end_addr = symbol.address + symbol.size as u64;
+                println!("  Address: 0x{:x}, Size: {}", start_addr, symbol.size);
+                let objdump_output = std::process::Command::new(&chosen_objdump)
+                    .arg("-d")
+                    .arg(format!("--start-address={}", start_addr))
+                    .arg(format!("--stop-address={}", end_addr))
+                    .arg(&elf_file)
+                    .output()?;
+                if objdump_output.status.success() {
+                    let stdout = String::from_utf8_lossy(&objdump_output.stdout);
+                    if stdout.trim().is_empty() {
+                        println!("  No disassembly output for this range.");
+                    } else {
+                        println!("{}", stdout);
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&objdump_output.stderr);
+                    println!("  objdump failed:\n{}", stderr);
+                }
+            }
+            _ => {
+                println!("Found multiple matches for pattern '{}':", pattern);
+                for symbol in matches {
+                    println!("  - {} (Address: 0x{:x}, Size: {})", symbol.name, symbol.address, symbol.size);
+                }
+                println!("Please refine your pattern to match a single symbol.");
+            }
+        }
+    }
     Ok(())
 }

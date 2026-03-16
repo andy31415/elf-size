@@ -51,6 +51,7 @@ impl ElfParser for NativeParser {
                 name,
                 size: symbol.size() as usize,
                 kind,
+                address: symbol.address(),
             });
         }
 

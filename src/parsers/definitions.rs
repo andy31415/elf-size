@@ -47,6 +47,7 @@ pub struct Symbol {
     pub name: String,
     pub size: usize,
     pub kind: SymbolKind,
+    pub address: u64,
 }
 
 impl Symbol {
@@ -66,6 +67,7 @@ mod tests {
             name: "_ZN3foo3barEv".to_string(),
             size: 10,
             kind: SymbolKind::Code,
+            address: 0,
         };
         symbol.demangle();
         assert_eq!(symbol.name, "foo::bar()");
@@ -74,6 +76,7 @@ mod tests {
             name: "not_mangled".to_string(),
             size: 20,
             kind: SymbolKind::Data,
+            address: 0,
         };
         symbol2.demangle();
         assert_eq!(symbol2.name, "not_mangled");

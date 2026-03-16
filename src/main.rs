@@ -84,6 +84,10 @@ enum Commands {
         /// Path to the objdump binary to use
         #[arg(long, default_value = "objdump")]
         objdump: String,
+
+        /// Interleave source code with disassembly (requires debug info)
+        #[arg(long, default_value_t = false)]
+        source: bool,
     },
 }
 
@@ -143,7 +147,8 @@ fn main() -> Result<()> {
             demangle,
             parser,
             objdump,
-        } => run_show(elf_file, symbols, demangle, &parser, &objdump),
+            source,
+        } => run_show(elf_file, symbols, demangle, &parser, &objdump, source),
     }
 }
 
@@ -296,6 +301,7 @@ fn run_show(
     demangle: bool,
     parser_name: &str,
     objdump_path: &str,
+    show_source: bool,
 ) -> Result<()> {
     let chosen_objdump = if objdump_path == "objdump" {
         match get_arch_default_objdump(&elf_file) {
@@ -311,7 +317,6 @@ fn run_show(
     } else {
         objdump_path.to_string()
     };
-    tracing::info!("Using objdump command: {}", chosen_objdump);
 
     let parser = create_parser(parser_name, &elf_file)?;
     let elf_path_str = elf_file
@@ -323,15 +328,15 @@ fn run_show(
     if demangle {
         elf_symbols.iter_mut().for_each(|s| s.demangle());
     }
-    tracing::info!("Loaded {} symbols from {}", elf_symbols.len(), elf_path_str);
+    tracing::debug!("Loaded {} symbols from {}", elf_symbols.len(), elf_path_str);
 
     for pattern in symbols {
         println!("\n--- Matching symbols for pattern: {} ---", pattern);
         let regex = match Regex::new(&pattern) {
             Ok(r) => r,
             Err(e) => {
-                println!("Invalid regex '{}': {}", pattern, e);
-                continue;
+                tracing::error!("Invalid regex '{}': {}", pattern, e);
+                eyre::bail!("Invalid regex '{}': {}", pattern, e)
             }
         };
 
@@ -346,14 +351,14 @@ fn run_show(
                 let symbol = matches[0];
                 println!("Found unique match: {}", symbol.name);
                 if symbol.kind != SymbolKind::Code {
-                    println!(
+                    tracing::warn!(
                         "Symbol '{}' is not a code symbol (kind: {:?}), skipping disassembly.",
                         symbol.name, symbol.kind
                     );
                     continue;
                 }
                 if symbol.size == 0 {
-                    println!(
+                    tracing::warn!(
                         "Symbol '{}' has zero size, skipping disassembly.",
                         symbol.name
                     );
@@ -362,33 +367,41 @@ fn run_show(
                 let start_addr = symbol.address;
                 let end_addr = symbol.address + symbol.size as u64;
                 println!("  Address: 0x{:x}, Size: {}", start_addr, symbol.size);
-                let objdump_output = std::process::Command::new(&chosen_objdump)
-                    .arg("-d")
-                    .arg(format!("--start-address={}", start_addr))
-                    .arg(format!("--stop-address={}", end_addr))
-                    .arg(&elf_file)
-                    .output()?;
+
+                let mut command = std::process::Command::new(&chosen_objdump);
+                if show_source {
+                    command.arg("-S");
+                } else {
+                    command.arg("-d");
+                }
+                command.arg(format!("--start-address={}", start_addr));
+                command.arg(format!("--stop-address={}", end_addr));
+                command.arg(&elf_file);
+
+                tracing::info!("Running command: {:?}", command);
+
+                let objdump_output = command.output()?;
+
                 if objdump_output.status.success() {
                     let stdout = String::from_utf8_lossy(&objdump_output.stdout);
                     if stdout.trim().is_empty() {
-                        println!("  No disassembly output for this range.");
+                        tracing::info!("No disassembly output for this range.");
+                        println!("  (No disassembly output for this range)");
                     } else {
                         println!("{}", stdout);
                     }
                 } else {
                     let stderr = String::from_utf8_lossy(&objdump_output.stderr);
-                    println!("  objdump failed:\n{}", stderr);
+                    eyre::bail!("objdump failed:\n{}", stderr)
                 }
             }
             _ => {
-                println!("Found multiple matches for pattern '{}':", pattern);
+                let mut match_list = String::new();
                 for symbol in matches {
-                    println!(
-                        "  - {} (Address: 0x{:x}, Size: {})",
-                        symbol.name, symbol.address, symbol.size
-                    );
+                    match_list.push_str(&format!("  - {} (Address: 0x{:x}, Size: {})
+", symbol.name, symbol.address, symbol.size));
                 }
-                println!("Please refine your pattern to match a single symbol.");
+                eyre::bail!("Found multiple matches for pattern '{}':\n{}Please refine your pattern to match a single symbol.", pattern, match_list)
             }
         }
     }

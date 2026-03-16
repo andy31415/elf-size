@@ -88,28 +88,3 @@ fn map_symbol_kind(sym: &elf::sym::Sym, elf: &elf::Elf) -> SymbolKind {
         _ => SymbolKind::Unknown,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    // Helper to create a dummy ELF file (very basic)
-    fn create_dummy_elf() -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        // This is not a valid ELF, but enough to mock file reading
-        // TODO: Find a way to create a minimal valid ELF for testing
-        writeln!(file, "ELF content placeholder").unwrap();
-        file
-    }
-
-    #[test]
-    fn test_goblin_parser_basic() {
-        // TODO: Implement a real test with a minimal ELF file
-        let parser = GoblinParser;
-        // let elf_file = create_dummy_elf();
-        // let symbols = parser.get_symbols(elf_file.path().to_str().unwrap());
-        // assert!(symbols.is_ok());
-    }
-}

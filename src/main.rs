@@ -11,6 +11,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 enum ParserType {
     Nm,
     Native,
+    Goblin,
 }
 
 mod parsers;
@@ -19,6 +20,7 @@ mod report;
 use parsers::definitions::{ElfParser, Symbol};
 use parsers::native::NativeParser;
 use parsers::nm::NmParser;
+use parsers::goblin::GoblinParser;
 use report::SymbolDiff;
 
 #[derive(Parser, Debug)]
@@ -87,6 +89,7 @@ fn main() -> Result<()> {
     let parser: Box<dyn ElfParser> = match args.parser {
         ParserType::Nm => Box::new(NmParser::default()),
         ParserType::Native => Box::new(NativeParser),
+        ParserType::Goblin => Box::new(GoblinParser),
     };
 
     tracing::info!("Using {:?} parser", args.parser);

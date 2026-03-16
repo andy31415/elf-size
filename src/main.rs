@@ -16,7 +16,7 @@ enum ParserType {
 mod elf_parser;
 mod report;
 
-use elf_parser::Symbol;
+use elf_parser::{demangle_symbols, ElfParser, NativeParser, NmParser, Symbol};
 use report::SymbolDiff;
 
 #[derive(Parser, Debug)]
@@ -82,17 +82,24 @@ fn main() -> Result<()> {
 
     tracing::info!("Starting elf-diff with args: {:?}", args);
 
-    let parser_fn = match args.parser {
-        ParserType::Nm => elf_parser::get_symbol_sizes_nm,
-        ParserType::Native => elf_parser::get_symbol_sizes_native,
+    let parser: Box<dyn ElfParser> = match args.parser {
+        ParserType::Nm => Box::new(NmParser::default()),
+        ParserType::Native => Box::new(NativeParser),
     };
 
     tracing::info!("Using {:?} parser", args.parser);
 
-    let symbols1 = parser_fn(&args.from, !args.no_demangle)?;
+    let mut symbols1 = parser.get_symbols(args.from.to_str().ok_or_else(|| eyre::eyre!("Invalid FROM path"))?).map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from FROM file: {:?}", symbols1.len());
-    let symbols2 = parser_fn(&args.to, !args.no_demangle)?;
+    if !args.no_demangle {
+        demangle_symbols(&mut symbols1);
+    }
+
+    let mut symbols2 = parser.get_symbols(args.to.to_str().ok_or_else(|| eyre::eyre!("Invalid TO path"))?).map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from TO file: {:?}", symbols2.len());
+    if !args.no_demangle {
+        demangle_symbols(&mut symbols2);
+    }
 
     let map1: HashMap<&str, &Symbol> = symbols1.iter().map(|s| (s.name.as_str(), s)).collect();
     let map2: HashMap<&str, &Symbol> = symbols2.iter().map(|s| (s.name.as_str(), s)).collect();

@@ -1,13 +1,13 @@
 use clap::{Parser, Subcommand};
 use eyre::Result;
-use object::{Object, Architecture};
+use object::{Architecture, Object};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
 use tracing::Level;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::util::SubscriberInitExt;
 
 mod parsers;
 mod report;
@@ -17,7 +17,7 @@ use crate::parsers::{
     definitions::{Symbol, SymbolKind},
 };
 use regex::Regex;
-use report::{generate_report, OutputType, ReportData, SymbolDiff};
+use report::{OutputType, ReportData, SymbolDiff, generate_report};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -280,7 +280,10 @@ fn get_arch_default_objdump(elf_file: &PathBuf) -> Result<String> {
         Architecture::X86_64 | Architecture::I386 => "objdump".to_string(),
         // Add more architectures as needed
         _ => {
-            tracing::warn!("Unsupported architecture {:?} for objdump auto-detection, defaulting to 'objdump'", arch);
+            tracing::warn!(
+                "Unsupported architecture {:?} for objdump auto-detection, defaulting to 'objdump'",
+                arch
+            );
             "objdump".to_string()
         }
     };
@@ -298,7 +301,10 @@ fn run_show(
         match get_arch_default_objdump(&elf_file) {
             Ok(default_cmd) => default_cmd,
             Err(e) => {
-                tracing::warn!("Failed to auto-detect objdump, falling back to 'objdump': {}", e);
+                tracing::warn!(
+                    "Failed to auto-detect objdump, falling back to 'objdump': {}",
+                    e
+                );
                 "objdump".to_string()
             }
         }
@@ -377,7 +383,10 @@ fn run_show(
             _ => {
                 println!("Found multiple matches for pattern '{}':", pattern);
                 for symbol in matches {
-                    println!("  - {} (Address: 0x{:x}, Size: {})", symbol.name, symbol.address, symbol.size);
+                    println!(
+                        "  - {} (Address: 0x{:x}, Size: {})",
+                        symbol.name, symbol.address, symbol.size
+                    );
                 }
                 println!("Please refine your pattern to match a single symbol.");
             }

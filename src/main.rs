@@ -33,10 +33,6 @@ struct Args {
 
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
-
-    /// Maximum width of the symbol column in table output (use "none" or "-1" for no limit)
-    #[arg(long, default_value = "100")]
-    max_symbol_width: String,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -126,21 +122,7 @@ fn main() -> Result<()> {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 
-    let max_symbol_width = match args.max_symbol_width.as_str() {
-        "none" | "-1" => None,
-        s => match s.parse::<usize>() {
-            Ok(n) => Some(n),
-            Err(_) => {
-                tracing::warn!(
-                    "Invalid max_symbol_width value: '{}'. Defaulting to no limit.",
-                    s
-                );
-                None
-            }
-        },
-    };
-
-    report::generate_report(&mut handle, diffs, args.output, max_symbol_width)
+    report::generate_report(&mut handle, diffs, args.output)
 }
 
 // Add this to allow clap to parse OutputType

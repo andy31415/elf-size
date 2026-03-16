@@ -34,7 +34,7 @@ impl std::fmt::Display for ChangeType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
 pub enum OutputType {
     Table,
     Csv,
@@ -46,7 +46,7 @@ pub struct ReportData<'a> {
     pub include_total: bool,
 }
 
-pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()> {
+pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData, max_symbol_width: usize) -> Result<()> {
     let mut sorted_diffs = data.diffs.to_vec();
     sorted_diffs.sort_by(|a, b| {
         kind_sort_order(&a.kind)
@@ -81,8 +81,13 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
             const DELTA_WIDTH: u16 = 8;
             const SEPARATORS: u16 = 5; // Approximately for the 4 columns
 
-            let symbol_width =
+            let dynamic_symbol_width =
                 terminal_width.saturating_sub(TYPE_WIDTH + KIND_WIDTH + DELTA_WIDTH + SEPARATORS);
+            let symbol_width = if max_symbol_width == 0 {
+                dynamic_symbol_width
+            } else {
+                std::cmp::min(dynamic_symbol_width, max_symbol_width as u16)
+            };
 
             table
                 .load_preset(UTF8_FULL_CONDENSED)
@@ -236,7 +241,7 @@ mod tests {
             include_total: false,
         };
         let mut buffer = Cursor::new(Vec::new());
-        generate_report(&mut buffer, &data).unwrap();
+        generate_report(&mut buffer, &data, 100).unwrap();
         let output = String::from_utf8(buffer.into_inner()).unwrap();
 
         let expected = "Type,Kind,Size Diff,Symbol\nADDED,Code,100,very_long_symbol_name_that_will_likely_be_truncated\nREMOVED,Data,-50,another_symbol\nADDED,ROData,10,ro_symbol\nCHANGED,BSS,20,bss_symbol\n";
@@ -252,7 +257,7 @@ mod tests {
             include_total: true,
         };
         let mut buffer = Cursor::new(Vec::new());
-        generate_report(&mut buffer, &data).unwrap();
+        generate_report(&mut buffer, &data, 100).unwrap();
         let output = String::from_utf8(buffer.into_inner()).unwrap();
 
         let expected = "Type,Kind,Size Diff,Symbol\nADDED,Code,100,very_long_symbol_name_that_will_likely_be_truncated\nREMOVED,Data,-50,another_symbol\nADDED,ROData,10,ro_symbol\nCHANGED,BSS,20,bss_symbol\nTOTAL,FLASH,110,\nTOTAL,RAM,20,\n";
@@ -268,7 +273,7 @@ mod tests {
             include_total: false,
         };
         let mut buffer = Cursor::new(Vec::new());
-        generate_report(&mut buffer, &data).unwrap();
+        generate_report(&mut buffer, &data, 100).unwrap();
         let output = String::from_utf8(buffer.into_inner()).unwrap();
 
         // Looser checks for table due to term size dependence and formatting
@@ -288,7 +293,7 @@ mod tests {
             include_total: true,
         };
         let mut buffer = Cursor::new(Vec::new());
-        generate_report(&mut buffer, &data).unwrap();
+        generate_report(&mut buffer, &data, 100).unwrap();
         let output = String::from_utf8(buffer.into_inner()).unwrap();
 
         assert!(output.contains("very_long_symbol_name_that_will"));
@@ -308,7 +313,7 @@ mod tests {
             include_total: false,
         };
         let mut buffer = Cursor::new(Vec::new());
-        generate_report(&mut buffer, &data).unwrap();
+        generate_report(&mut buffer, &data, 100).unwrap();
         let output = String::from_utf8(buffer.into_inner()).unwrap();
         assert_eq!(output, "Type,Kind,Size Diff,Symbol\n");
 
@@ -318,7 +323,7 @@ mod tests {
             include_total: true, // Check totals with empty too
         };
         let mut buffer_table = Cursor::new(Vec::new());
-        generate_report(&mut buffer_table, &data_table).unwrap();
+        generate_report(&mut buffer_table, &data_table, 100).unwrap();
         let output_table = String::from_utf8(buffer_table.into_inner()).unwrap();
         assert!(output_table.contains("Type"));
         assert!(output_table.contains("TOTAL"));

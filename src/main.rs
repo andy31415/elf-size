@@ -46,8 +46,6 @@ fn main() -> Result<(), String> {
                         name: (*name).to_string(),
                         change_type: "CHANGED".to_string(),
                         size_diff: symbol1.size as i64 - symbol2.size as i64,
-                        size1: symbol1.size,
-                        size2: symbol2.size,
                     });
                 }
             }
@@ -56,8 +54,6 @@ fn main() -> Result<(), String> {
                     name: (*name).to_string(),
                     change_type: "REMOVED".to_string(),
                     size_diff: symbol1.size as i64,
-                    size1: symbol1.size,
-                    size2: 0,
                 });
             }
         }
@@ -69,8 +65,6 @@ fn main() -> Result<(), String> {
                 name: (*name).to_string(),
                 change_type: "ADDED".to_string(),
                 size_diff: -(symbol2.size as i64),
-                size1: 0,
-                size2: symbol2.size,
             });
         }
     }

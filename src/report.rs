@@ -17,29 +17,25 @@ pub fn generate_report<W: Write>(
     match output_type {
         OutputType::Table => {
             let mut table = Table::new();
-            table.add_row(row!["Type", "Size Diff", "Symbol", "Size1", "Size2"]);
+            table.add_row(row!["Type", "Size Diff", "Symbol"]);
 
             for diff in diffs {
                 table.add_row(Row::new(vec![
                     Cell::new(&diff.change_type),
                     Cell::new(&diff.size_diff.to_string()),
                     Cell::new(&diff.name),
-                    Cell::new(&diff.size1.to_string()),
-                    Cell::new(&diff.size2.to_string()),
                 ]));
             }
             table.print(writer)?;
         }
         OutputType::Csv => {
             let mut wtr = csv::Writer::from_writer(writer);
-            wtr.write_record(["Type", "Size Diff", "Symbol", "Size1", "Size2"])?;
+            wtr.write_record(["Type", "Size Diff", "Symbol"])?;
             for diff in diffs {
                 wtr.write_record(&[
                     diff.change_type,
                     diff.size_diff.to_string(),
                     diff.name,
-                    diff.size1.to_string(),
-                    diff.size2.to_string(),
                 ])?;
             }
             wtr.flush()?;
@@ -53,6 +49,4 @@ pub struct SymbolDiff {
     pub name: String,
     pub change_type: String,
     pub size_diff: i64,
-    pub size1: u64,
-    pub size2: u64,
 }

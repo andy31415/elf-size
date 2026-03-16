@@ -91,13 +91,12 @@ fn main() -> Result<()> {
 
     tracing::info!("Using {:?} parser", args.parser);
 
-    let mut symbols1 = parser
-        .get_symbols(
-            args.from
-                .to_str()
-                .ok_or_else(|| eyre::eyre!("Invalid FROM path"))?,
-        )
-        .map_err(|e| eyre::eyre!(e))?;
+    let mut symbols1 =
+        parser
+            .get_symbols(args.from.to_str().ok_or_else(|| {
+                eyre::eyre!("FROM path is not valid UTF-8: {}", args.from.display())
+            })?)
+            .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from FROM file: {:?}", symbols1.len());
     if !args.no_demangle {
         for s in &mut symbols1 {
@@ -109,7 +108,7 @@ fn main() -> Result<()> {
         .get_symbols(
             args.to
                 .to_str()
-                .ok_or_else(|| eyre::eyre!("Invalid TO path"))?,
+                .ok_or_else(|| eyre::eyre!("TO path is not valid UTF-8: {}", args.to.display()))?,
         )
         .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from TO file: {:?}", symbols2.len());

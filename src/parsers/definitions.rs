@@ -54,3 +54,28 @@ impl Symbol {
         self.name = demangle::_demangle_symbol_name(&self.name);
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::parsers::definitions::{Symbol, SymbolKind};
+
+    #[test]
+    fn test_symbol_demangle() {
+        let mut symbol = Symbol {
+            name: "_ZN3foo3barEv".to_string(),
+            size: 10,
+            kind: SymbolKind::Code,
+        };
+        symbol.demangle();
+        assert_eq!(symbol.name, "foo::bar()");
+
+        let mut symbol2 = Symbol {
+            name: "not_mangled".to_string(),
+            size: 20,
+            kind: SymbolKind::Data,
+        };
+        symbol2.demangle();
+        assert_eq!(symbol2.name, "not_mangled");
+    }
+}

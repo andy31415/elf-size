@@ -179,3 +179,149 @@ pub struct SymbolDiff {
     pub size_diff: i64,
     pub kind: SymbolKind,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parsers::definitions::SymbolKind;
+
+    #[test]
+    fn test_kind_sort_order() {
+        assert_eq!(kind_sort_order(&SymbolKind::Code), 0);
+        assert_eq!(kind_sort_order(&SymbolKind::Data), 1);
+        assert_eq!(kind_sort_order(&SymbolKind::RoData), 2);
+        assert_eq!(kind_sort_order(&SymbolKind::Weak), 3);
+        assert_eq!(kind_sort_order(&SymbolKind::Bss), 4);
+        assert_eq!(kind_sort_order(&SymbolKind::Other), 5);
+        assert_eq!(kind_sort_order(&SymbolKind::Undefined), 5);
+    }
+
+    use std::io::Cursor;
+
+    fn sample_diffs() -> Vec<SymbolDiff> {
+        vec![
+            SymbolDiff {
+                name: "very_long_symbol_name_that_will_likely_be_truncated".to_string(),
+                change_type: ChangeType::Added,
+                size_diff: 100,
+                kind: SymbolKind::Code,
+            },
+            SymbolDiff {
+                name: "another_symbol".to_string(),
+                change_type: ChangeType::Removed,
+                size_diff: -50,
+                kind: SymbolKind::Data,
+            },
+            SymbolDiff {
+                name: "bss_symbol".to_string(),
+                change_type: ChangeType::Changed,
+                size_diff: 20,
+                kind: SymbolKind::Bss,
+            },
+            SymbolDiff {
+                name: "ro_symbol".to_string(),
+                change_type: ChangeType::Added,
+                size_diff: 10,
+                kind: SymbolKind::RoData,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_generate_report_csv() {
+        let diffs = sample_diffs();
+        let data = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Csv,
+            include_total: false,
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        generate_report(&mut buffer, &data).unwrap();
+        let output = String::from_utf8(buffer.into_inner()).unwrap();
+
+        let expected = "Type,Kind,Size Diff,Symbol\nADDED,Code,100,very_long_symbol_name_that_will_likely_be_truncated\nREMOVED,Data,-50,another_symbol\nADDED,ROData,10,ro_symbol\nCHANGED,BSS,20,bss_symbol\n";
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_generate_report_csv_with_total() {
+        let diffs = sample_diffs();
+        let data = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Csv,
+            include_total: true,
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        generate_report(&mut buffer, &data).unwrap();
+        let output = String::from_utf8(buffer.into_inner()).unwrap();
+
+        let expected = "Type,Kind,Size Diff,Symbol\nADDED,Code,100,very_long_symbol_name_that_will_likely_be_truncated\nREMOVED,Data,-50,another_symbol\nADDED,ROData,10,ro_symbol\nCHANGED,BSS,20,bss_symbol\nTOTAL,FLASH,110,\nTOTAL,RAM,20,\n";
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_generate_report_table() {
+        let diffs = sample_diffs();
+        let data = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Table,
+            include_total: false,
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        generate_report(&mut buffer, &data).unwrap();
+        let output = String::from_utf8(buffer.into_inner()).unwrap();
+
+        // Looser checks for table due to term size dependence and formatting
+        assert!(output.contains("very_long_symbol_name_that_will")); // Check for truncation indicator
+        assert!(output.contains("another_symbol"));
+        assert!(output.contains("Code"));
+        assert!(output.contains("Data"));
+        assert!(!output.contains("TOTAL"));
+    }
+
+    #[test]
+    fn test_generate_report_table_with_total() {
+        let diffs = sample_diffs();
+        let data = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Table,
+            include_total: true,
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        generate_report(&mut buffer, &data).unwrap();
+        let output = String::from_utf8(buffer.into_inner()).unwrap();
+
+        assert!(output.contains("very_long_symbol_name_that_will"));
+        assert!(output.contains("TOTAL"));
+        assert!(output.contains("FLASH"));
+        assert!(output.contains("RAM"));
+        assert!(output.contains("110")); // FLASH total
+        assert!(output.contains("20")); // RAM total
+    }
+
+    #[test]
+    fn test_generate_report_empty() {
+        let diffs: Vec<SymbolDiff> = Vec::new();
+        let data = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Csv,
+            include_total: false,
+        };
+        let mut buffer = Cursor::new(Vec::new());
+        generate_report(&mut buffer, &data).unwrap();
+        let output = String::from_utf8(buffer.into_inner()).unwrap();
+        assert_eq!(output, "Type,Kind,Size Diff,Symbol\n");
+
+        let data_table = ReportData {
+            diffs: &diffs,
+            output_type: OutputType::Table,
+            include_total: true, // Check totals with empty too
+        };
+        let mut buffer_table = Cursor::new(Vec::new());
+        generate_report(&mut buffer_table, &data_table).unwrap();
+        let output_table = String::from_utf8(buffer_table.into_inner()).unwrap();
+        assert!(output_table.contains("Type"));
+        assert!(output_table.contains("TOTAL"));
+        assert!(output_table.contains("0")); // Totals should be 0
+    }
+}

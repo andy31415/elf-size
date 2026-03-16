@@ -7,6 +7,12 @@ use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::util::SubscriberInitExt;
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+enum ParserType {
+    Nm,
+    Native,
+}
+
 mod elf_parser;
 mod report;
 
@@ -16,13 +22,13 @@ use report::SymbolDiff;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// First ELF file to compare
-    #[arg(value_name = "FILE1")]
-    file1: PathBuf,
+    /// The base ELF file (before changes)
+    #[arg(value_name = "FROM_FILE")]
+    from: PathBuf,
 
-    /// Second ELF file to compare
-    #[arg(value_name = "FILE2")]
-    file2: PathBuf,
+    /// The new ELF file (after changes)
+    #[arg(value_name = "TO_FILE")]
+    to: PathBuf,
 
     /// Output format
     #[arg(short, long, value_parser = ["table", "csv"], default_value = "table")]
@@ -38,6 +44,10 @@ struct Args {
 
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
+
+    /// Parser type to use
+    #[arg(long, value_enum, default_value_t = ParserType::Native)]
+    parser: ParserType,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -72,10 +82,17 @@ fn main() -> Result<()> {
 
     tracing::info!("Starting elf-diff with args: {:?}", args);
 
-    let symbols1 = elf_parser::get_symbol_sizes(&args.file1, !args.no_demangle)?;
-    tracing::debug!("Symbols from file1: {:?}", symbols1.len());
-    let symbols2 = elf_parser::get_symbol_sizes(&args.file2, !args.no_demangle)?;
-    tracing::debug!("Symbols from file2: {:?}", symbols2.len());
+    let parser_fn = match args.parser {
+        ParserType::Nm => elf_parser::get_symbol_sizes_nm,
+        ParserType::Native => elf_parser::get_symbol_sizes_native,
+    };
+
+    tracing::info!("Using {:?} parser", args.parser);
+
+    let symbols1 = parser_fn(&args.from, !args.no_demangle)?;
+    tracing::debug!("Symbols from FROM file: {:?}", symbols1.len());
+    let symbols2 = parser_fn(&args.to, !args.no_demangle)?;
+    tracing::debug!("Symbols from TO file: {:?}", symbols2.len());
 
     let map1: HashMap<&str, &Symbol> = symbols1.iter().map(|s| (s.name.as_str(), s)).collect();
     let map2: HashMap<&str, &Symbol> = symbols2.iter().map(|s| (s.name.as_str(), s)).collect();
@@ -95,7 +112,8 @@ fn main() -> Result<()> {
                     diffs.push(SymbolDiff {
                         name: (*name).to_string(),
                         change_type: report::ChangeType::Changed,
-                        size_diff: symbol1.size as i64 - symbol2.size as i64,
+                        size_diff: symbol2.size as i64 - symbol1.size as i64,
+                        kind: symbol1.kind.clone(),
                     });
                 } else {
                     tracing::trace!("Symbol UNCHANGED: {}", name);
@@ -106,7 +124,8 @@ fn main() -> Result<()> {
                 diffs.push(SymbolDiff {
                     name: (*name).to_string(),
                     change_type: report::ChangeType::Removed,
-                    size_diff: symbol1.size as i64,
+                    size_diff: -(symbol1.size as i64),
+                    kind: symbol1.kind.clone(),
                 });
             }
         }
@@ -118,7 +137,8 @@ fn main() -> Result<()> {
             diffs.push(SymbolDiff {
                 name: (*name).to_string(),
                 change_type: report::ChangeType::Added,
-                size_diff: -(symbol2.size as i64),
+                size_diff: symbol2.size as i64,
+                kind: symbol2.kind.clone(),
             });
         }
     }

@@ -1,3 +1,15 @@
+use crate::elf_parser::SymbolKind;
+
+fn kind_sort_order(kind: &SymbolKind) -> usize {
+    match kind {
+        SymbolKind::Code => 0,
+        SymbolKind::Data => 1,
+        SymbolKind::RoData => 2,
+        SymbolKind::Weak => 3,
+        SymbolKind::Bss => 4,
+        _ => 5, // All others
+    }
+}
 use comfy_table::{
     Attribute, Cell, CellAlignment, ColumnConstraint, Table, Width, presets::UTF8_FULL_CONDENSED,
 };
@@ -36,9 +48,23 @@ pub struct ReportData<'a> {
 
 pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()> {
     let mut sorted_diffs = data.diffs.to_vec();
-    sorted_diffs.sort_by_key(|d| d.size_diff);
+    sorted_diffs.sort_by(|a, b| {
+        kind_sort_order(&a.kind)
+            .cmp(&kind_sort_order(&b.kind))
+            .then_with(|| b.size_diff.cmp(&a.size_diff)) // Secondary sort by size descending
+    });
 
-    let total_diff: i64 = sorted_diffs.iter().map(|d| d.size_diff).sum();
+    let flash_total: i64 = sorted_diffs
+        .iter()
+        .filter(|d| matches!(d.kind, SymbolKind::Code | SymbolKind::RoData))
+        .map(|d| d.size_diff)
+        .sum();
+
+    let ram_total: i64 = sorted_diffs
+        .iter()
+        .filter(|d| d.kind == SymbolKind::Bss)
+        .map(|d| d.size_diff)
+        .sum();
 
     tracing::debug!(
         "Generating report with type: {:?}, include_total: {}",
@@ -51,15 +77,18 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
             let mut table = Table::new();
             let terminal_width = terminal_size().map(|(TermWidth(w), _)| w).unwrap_or(120);
             const TYPE_WIDTH: u16 = 10;
+            const KIND_WIDTH: u16 = 12;
             const DELTA_WIDTH: u16 = 8;
-            const SEPARATORS: u16 = 4; // Approximately for the 3 columns
+            const SEPARATORS: u16 = 5; // Approximately for the 4 columns
 
-            let symbol_width = terminal_width.saturating_sub(TYPE_WIDTH + DELTA_WIDTH + SEPARATORS);
+            let symbol_width =
+                terminal_width.saturating_sub(TYPE_WIDTH + KIND_WIDTH + DELTA_WIDTH + SEPARATORS);
 
             table
                 .load_preset(UTF8_FULL_CONDENSED)
                 .set_header(vec![
                     Cell::new("Type").add_attribute(Attribute::Bold),
+                    Cell::new("Kind").add_attribute(Attribute::Bold),
                     Cell::new("Delta").add_attribute(Attribute::Bold),
                     Cell::new("Symbol").add_attribute(Attribute::Bold),
                 ])
@@ -71,6 +100,10 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
                 column.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(TYPE_WIDTH)));
             }
             if let Some(column) = table.column_mut(1) {
+                // Kind
+                column.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(KIND_WIDTH)));
+            }
+            if let Some(column) = table.column_mut(2) {
                 // Delta
                 column.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(DELTA_WIDTH)));
             }
@@ -88,6 +121,7 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
                 };
                 table.add_row(vec![
                     Cell::new(diff.change_type.to_string()),
+                    Cell::new(diff.kind.to_string()),
                     Cell::new(diff.size_diff.to_string()).set_alignment(CellAlignment::Right),
                     Cell::new(&symbol_name),
                 ]);
@@ -96,7 +130,16 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
             if data.include_total {
                 table.add_row(vec![
                     Cell::new("TOTAL").add_attribute(Attribute::Bold),
-                    Cell::new(total_diff.to_string())
+                    Cell::new("FLASH").add_attribute(Attribute::Bold),
+                    Cell::new(flash_total.to_string())
+                        .set_alignment(CellAlignment::Right)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new(""),
+                ]);
+                table.add_row(vec![
+                    Cell::new("TOTAL").add_attribute(Attribute::Bold),
+                    Cell::new("RAM").add_attribute(Attribute::Bold),
+                    Cell::new(ram_total.to_string())
                         .set_alignment(CellAlignment::Right)
                         .add_attribute(Attribute::Bold),
                     Cell::new(""),
@@ -106,19 +149,22 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
         }
         OutputType::Csv => {
             let mut wtr = csv::Writer::from_writer(writer);
-            wtr.write_record(["Type", "Size Diff", "Symbol"])
+            wtr.write_record(["Type", "Kind", "Size Diff", "Symbol"])
                 .context("Failed to write CSV header")?;
             for diff in &sorted_diffs {
                 wtr.write_record(&[
                     diff.change_type.to_string(),
+                    diff.kind.to_string(),
                     diff.size_diff.to_string(),
                     diff.name.clone(),
                 ])
                 .context("Failed to write CSV record")?;
             }
             if data.include_total {
-                wtr.write_record(["TOTAL", &total_diff.to_string(), ""])
-                    .context("Failed to write CSV total")?;
+                wtr.write_record(["TOTAL", "FLASH", &flash_total.to_string(), ""])
+                    .context("Failed to write CSV FLASH total")?;
+                wtr.write_record(["TOTAL", "RAM", &ram_total.to_string(), ""])
+                    .context("Failed to write CSV RAM total")?;
             }
             wtr.flush().context("Failed to flush CSV writer")?;
         }
@@ -131,4 +177,5 @@ pub struct SymbolDiff {
     pub name: String,
     pub change_type: ChangeType,
     pub size_diff: i64,
+    pub kind: SymbolKind,
 }

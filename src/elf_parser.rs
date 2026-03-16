@@ -1,12 +1,144 @@
 use eyre::{Context, Result, bail};
+use object::{Object, ObjectSection, ObjectSymbol, SectionKind};
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-extern crate cpp_demangle;
-use cpp_demangle::DemangleOptions;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SymbolKind {
+    Code,
+    Data,
+    Bss,
+    RoData,
+    Weak,
+    Undefined,
+    Other,
+    OtherSect,
+    ErrSection,
+    Unknown,
+    None,
+    Absolute,
+    Common,
+}
 
-pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>> {
-    tracing::debug!("Getting symbol sizes for file: {:?}", file_path);
+impl std::fmt::Display for SymbolKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SymbolKind::Code => write!(f, "Code"),
+            SymbolKind::Data => write!(f, "Data"),
+            SymbolKind::Bss => write!(f, "BSS"),
+            SymbolKind::RoData => write!(f, "ROData"),
+            SymbolKind::Weak => write!(f, "Weak"),
+            SymbolKind::Undefined => write!(f, "Undefined"),
+            SymbolKind::Other => write!(f, "Other"),
+            SymbolKind::OtherSect => write!(f, "OtherSect"),
+            SymbolKind::ErrSection => write!(f, "ErrSection"),
+            SymbolKind::Unknown => write!(f, "Unknown"),
+            SymbolKind::None => write!(f, "None"),
+            SymbolKind::Absolute => write!(f, "Absolute"),
+            SymbolKind::Common => write!(f, "Common"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Symbol {
+    pub name: String,
+    pub size: usize,
+    pub kind: SymbolKind,
+}
+
+fn _demangle_symbol_name(raw_name: &str) -> String {
+    // First try Rust demangling
+    if let Ok(demangled) = rustc_demangle::try_demangle(raw_name) {
+        let demangled_str = demangled.to_string();
+        if demangled_str != raw_name {
+            tracing::trace!("Rust demangled {} to {}", raw_name, demangled_str);
+            return demangled_str;
+        }
+    }
+
+    // Then try C++ demangling
+    match cpp_demangle::Symbol::new(raw_name.as_bytes()) {
+        Ok(symbol) => match symbol.demangle(&cpp_demangle::DemangleOptions::default()) {
+            Ok(demangled) => {
+                tracing::trace!("C++ demangled {} to {}", raw_name, demangled);
+                return demangled;
+            }
+            Err(_) => {
+                tracing::trace!("c++ demangle failed for {}, using original", raw_name);
+            }
+        },
+        Err(_) => {
+            tracing::trace!("c++ demangle parse failed for {}, using original", raw_name);
+        }
+    }
+
+    raw_name.to_string()
+}
+
+pub fn get_symbol_sizes_native(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>> {
+    tracing::debug!("Getting symbol sizes for file (native): {:?}", file_path);
+    let bin_data = fs::read(file_path).context("Failed to read file")?;
+    let obj_file = object::File::parse(&*bin_data).context("Failed to parse ELF file")?;
+    let mut symbols = Vec::new();
+
+    for symbol in obj_file.symbols() {
+        if symbol.is_undefined() || symbol.size() == 0 {
+            continue;
+        }
+
+        let raw_name = match symbol.name() {
+            Ok(name) => name,
+            Err(_) => {
+                tracing::warn!("Skipping symbol with invalid name");
+                continue;
+            }
+        };
+
+        let name = if demangle {
+            _demangle_symbol_name(raw_name)
+        } else {
+            raw_name.to_string()
+        };
+
+        let kind = match symbol.section() {
+            object::SymbolSection::Section(index) => match obj_file.section_by_index(index) {
+                Ok(section) => match section.kind() {
+                    SectionKind::Text => SymbolKind::Code,
+                    SectionKind::Data => SymbolKind::Data,
+                    SectionKind::UninitializedData => SymbolKind::Bss,
+                    SectionKind::ReadOnlyData => SymbolKind::RoData,
+                    _ => SymbolKind::OtherSect,
+                },
+                Err(_) => SymbolKind::ErrSection,
+            },
+            object::SymbolSection::Unknown => SymbolKind::Unknown,
+            object::SymbolSection::None => SymbolKind::None,
+            object::SymbolSection::Undefined => SymbolKind::Undefined,
+            object::SymbolSection::Absolute => SymbolKind::Absolute,
+            object::SymbolSection::Common => SymbolKind::Common,
+            _ => SymbolKind::Other,
+        };
+
+        symbols.push(Symbol {
+            name,
+            size: symbol.size() as usize,
+            kind,
+        });
+    }
+
+    tracing::debug!(
+        "Found {} symbols in {:?} (native)",
+        symbols.len(),
+        file_path
+    );
+    symbols.sort_by(|a, b| b.size.cmp(&a.size));
+    Ok(symbols)
+}
+
+pub fn get_symbol_sizes_nm(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>> {
+    tracing::debug!("Getting symbol sizes for file (nm): {:?}", file_path);
     let output = Command::new("nm")
         .arg("--print-size")
         .arg("--size-sort")
@@ -42,39 +174,30 @@ pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>>
             .parse()
             .with_context(|| format!("Failed to parse size from line: {}", line))?;
         let symbol_type = parts[2].chars().next().unwrap_or('?');
-        let mut name = parts[3].to_string();
+        let raw_name = parts[3];
+        let name = if demangle {
+            _demangle_symbol_name(raw_name)
+        } else {
+            raw_name.to_string()
+        };
 
-        if demangle {
-            match cpp_demangle::Symbol::new(name.as_bytes()) {
-                Ok(symbol) => match symbol.demangle(&DemangleOptions::default()) {
-                    Ok(demangled) => {
-                        name = demangled;
-                        tracing::trace!("Demangled {} to {}", parts[3], name);
-                    }
-                    Err(_) => {
-                        tracing::trace!("Demangling failed for {}, using original name", parts[3]);
-                    }
-                },
-                Err(_) => {
-                    tracing::trace!("Failed to parse symbol {}, using original name", parts[3]);
-                }
-            }
-        }
+        let kind = match symbol_type {
+            'T' | 't' => SymbolKind::Code,
+            'D' | 'd' => SymbolKind::Data,
+            'B' | 'b' => SymbolKind::Bss,
+            'R' | 'r' => SymbolKind::RoData,
+            'W' | 'w' => SymbolKind::Weak,
+            'U' => SymbolKind::Undefined,
+            _ => SymbolKind::Other,
+        };
 
         symbols.push(Symbol {
             name,
-            symbol_type,
-            size,
+            size: size as usize,
+            kind,
         });
     }
 
-    tracing::debug!("Found {} symbols in {:?}", symbols.len(), file_path);
+    tracing::debug!("Found {} symbols in {:?} (nm)", symbols.len(), file_path);
     Ok(symbols)
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Symbol {
-    pub name: String,
-    pub symbol_type: char,
-    pub size: u64,
 }

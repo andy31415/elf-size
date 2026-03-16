@@ -353,7 +353,8 @@ fn run_show(
                 if symbol.kind != SymbolKind::Code {
                     tracing::warn!(
                         "Symbol '{}' is not a code symbol (kind: {:?}), skipping disassembly.",
-                        symbol.name, symbol.kind
+                        symbol.name,
+                        symbol.kind
                     );
                     continue;
                 }
@@ -398,10 +399,17 @@ fn run_show(
             _ => {
                 let mut match_list = String::new();
                 for symbol in matches {
-                    match_list.push_str(&format!("  - {} (Address: 0x{:x}, Size: {})
-", symbol.name, symbol.address, symbol.size));
+                    match_list.push_str(&format!(
+                        "  - {} (Address: 0x{:x}, Size: {})
+",
+                        symbol.name, symbol.address, symbol.size
+                    ));
                 }
-                eyre::bail!("Found multiple matches for pattern '{}':\n{}Please refine your pattern to match a single symbol.", pattern, match_list)
+                eyre::bail!(
+                    "Found multiple matches for pattern '{}':\n{}Please refine your pattern to match a single symbol.",
+                    pattern,
+                    match_list
+                )
             }
         }
     }

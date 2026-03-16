@@ -1,22 +1,24 @@
 use std::path::Path;
 use std::process::Command;
+use eyre::{Context, Result, bail};
 
-pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>, String> {
+pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>> {
+    tracing::debug!("Getting symbol sizes for file: {:?}", file_path);
     let output = Command::new("nm")
         .arg("--print-size")
         .arg("--size-sort")
         .arg("--radix=d")
         .arg(file_path)
         .output()
-        .map_err(|e| format!("Failed to execute nm: {}", e))?;
+        .context("Failed to execute nm")?;
 
     if !output.status.success() {
-        return Err(format!(
+        bail!(
             "nm failed with exit code {}: {}\nstderr: {}",
             output.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
-        ));
+        );
     }
 
     let output_str = String::from_utf8_lossy(&output.stdout);
@@ -29,18 +31,21 @@ pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>,
 
         let parts: Vec<&str> = line.splitn(4, ' ').collect();
         if parts.len() != 4 {
-            eprintln!("Skipping malformed line: {}", line);
+            tracing::warn!("Skipping malformed line: {}", line);
             continue;
         }
 
         let size: u64 = parts[1]
             .parse()
-            .map_err(|e| format!("Failed to parse size: {}\nLine: {}", e, line))?;
+            .with_context(|| format!("Failed to parse size from line: {}", line))?;
         let symbol_type = parts[2].chars().next().unwrap_or('?');
         let mut name = parts[3].to_string();
 
-        if demangle && let Ok(demangled) = rustc_demangle::try_demangle(&name) {
-            name = demangled.to_string();
+        if demangle {
+            if let Ok(demangled) = rustc_demangle::try_demangle(&name) {
+                name = demangled.to_string();
+                tracing::trace!("Demangled {} to {}", parts[3], name);
+            }
         }
 
         symbols.push(Symbol {
@@ -50,6 +55,7 @@ pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>,
         });
     }
 
+    tracing::debug!("Found {} symbols in {:?}", symbols.len(), file_path);
     Ok(symbols)
 }
 

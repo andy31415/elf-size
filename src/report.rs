@@ -1,5 +1,6 @@
 use prettytable::{Cell, Row, Table, row};
 use std::io::Write;
+use eyre::{Context, Result};
 
 #[derive(Clone, Debug)]
 pub enum OutputType {
@@ -11,8 +12,10 @@ pub fn generate_report<W: Write>(
     writer: &mut W,
     mut diffs: Vec<SymbolDiff>,
     output_type: OutputType,
-) -> Result<(), std::io::Error> {
+) -> Result<()> {
     diffs.sort_by_key(|d| d.size_diff);
+
+    tracing::debug!("Generating report with type: {:?}", output_type);
 
     match output_type {
         OutputType::Table => {
@@ -26,19 +29,19 @@ pub fn generate_report<W: Write>(
                     Cell::new(&diff.name),
                 ]));
             }
-            table.print(writer)?;
+            table.print(writer).context("Failed to print table")?;
         }
         OutputType::Csv => {
             let mut wtr = csv::Writer::from_writer(writer);
-            wtr.write_record(["Type", "Size Diff", "Symbol"])?;
+            wtr.write_record(["Type", "Size Diff", "Symbol"]).context("Failed to write CSV header")?;
             for diff in diffs {
                 wtr.write_record(&[
                     diff.change_type,
                     diff.size_diff.to_string(),
                     diff.name,
-                ])?;
+                ]).context("Failed to write CSV record")?;
             }
-            wtr.flush()?;
+            wtr.flush().context("Failed to flush CSV writer")?;
         }
     }
     Ok(())

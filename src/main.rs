@@ -143,5 +143,3 @@ fn main() -> Result<()> {
 
     report::generate_report(&mut handle, &report_data)
 }
-
-

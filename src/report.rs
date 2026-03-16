@@ -117,7 +117,7 @@ pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()
                 .context("Failed to write CSV record")?;
             }
             if data.include_total {
-                wtr.write_record(&["TOTAL", &total_diff.to_string(), ""])
+                wtr.write_record(["TOTAL", &total_diff.to_string(), ""])
                     .context("Failed to write CSV total")?;
             }
             wtr.flush().context("Failed to flush CSV writer")?;

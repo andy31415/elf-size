@@ -1,4 +1,4 @@
 pub mod definitions;
-pub mod demangle_utils;
+pub mod demangle;
 pub mod native;
 pub mod nm;

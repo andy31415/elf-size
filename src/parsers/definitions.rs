@@ -1,4 +1,4 @@
-use crate::parsers::demangle_utils;
+use crate::parsers::demangle;
 use eyre::Result;
 
 pub trait ElfParser {
@@ -51,6 +51,6 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn demangle(&mut self) {
-        self.name = demangle_utils::_demangle_symbol_name(&self.name);
+        self.name = demangle::_demangle_symbol_name(&self.name);
     }
 }

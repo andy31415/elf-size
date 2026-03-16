@@ -33,6 +33,10 @@ struct Args {
 
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
+
+    /// Include a total row in table output
+    #[arg(long, value_parser = ["yes", "no"])]
+    include_total: Option<String>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -122,7 +126,14 @@ fn main() -> Result<()> {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 
-    report::generate_report(&mut handle, diffs, args.output)
+    let include_total_bool = match args.include_total.as_deref() {
+        Some("yes") => true,
+        Some("no") => false,
+        None => matches!(args.output, report::OutputType::Table),
+        Some(_) => unreachable!(), // Clap should prevent this
+    };
+
+    report::generate_report(&mut handle, diffs, args.output, include_total_bool)
 }
 
 // Add this to allow clap to parse OutputType

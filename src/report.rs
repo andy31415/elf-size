@@ -32,6 +32,7 @@ pub fn generate_report<W: Write>(
     writer: &mut W,
     mut diffs: Vec<SymbolDiff>,
     output_type: OutputType,
+    include_total: bool,
 ) -> Result<()> {
     diffs.sort_by_key(|d| d.size_diff);
 
@@ -67,6 +68,8 @@ pub fn generate_report<W: Write>(
             }
             // Note: No constraint on Symbol column, width is handled by manual truncation.
 
+            let total_diff: i64 = diffs.iter().map(|d| d.size_diff).sum();
+
             for diff in diffs {
                 let symbol_name = if diff.name.len() > symbol_width as usize {
                     if symbol_width > 3 {
@@ -81,6 +84,16 @@ pub fn generate_report<W: Write>(
                     Cell::new(diff.change_type.to_string()),
                     Cell::new(diff.size_diff.to_string()).set_alignment(CellAlignment::Right),
                     Cell::new(&symbol_name),
+                ]);
+            }
+
+            if include_total {
+                table.add_row(vec![
+                    Cell::new("TOTAL").add_attribute(Attribute::Bold),
+                    Cell::new(total_diff.to_string())
+                        .set_alignment(CellAlignment::Right)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new(""),
                 ]);
             }
             writeln!(writer, "{}", table).context("Failed to print table")?;

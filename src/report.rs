@@ -1,5 +1,5 @@
-use prettytable::{Cell, Row, Table, row, format};
 use eyre::{Context, Result};
+use prettytable::{Cell, Row, Table, format, row};
 use std::io::Write;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

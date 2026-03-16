@@ -29,6 +29,7 @@ pub fn generate_report<W: Write>(
     writer: &mut W,
     mut diffs: Vec<SymbolDiff>,
     output_type: OutputType,
+    max_symbol_width: Option<usize>,
 ) -> Result<()> {
     diffs.sort_by_key(|d| d.size_diff);
 
@@ -40,10 +41,20 @@ pub fn generate_report<W: Write>(
             table.add_row(row!["Type", "Size Diff", "Symbol"]);
 
             for diff in diffs {
+                let symbol_name = match max_symbol_width {
+                    Some(max_width) if diff.name.len() > max_width => {
+                        if max_width > 3 {
+                            format!("{}...", &diff.name[..max_width - 3])
+                        } else {
+                            diff.name.clone()
+                        }
+                    }
+                    _ => diff.name.clone(),
+                };
                 table.add_row(Row::new(vec![
                     Cell::new(&diff.change_type.to_string()),
                     Cell::new(&diff.size_diff.to_string()),
-                    Cell::new(&diff.name),
+                    Cell::new(&symbol_name),
                 ]));
             }
             table.print(writer).context("Failed to print table")?;

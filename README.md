@@ -26,6 +26,7 @@ elf-diff [OPTIONS] <FILE1> <FILE2>
   - `table` (default): Prints a formatted table to the console.  
   - `csv`: Prints the output in CSV format.
 - `--no-demangle`: Disables C++ symbol demangling (demangling is enabled by default).
+- `--max-symbol-width <WIDTH>`: Sets the maximum width for the symbol name column in table output. Accepts a number, "none", or "-1" for no limit. Defaults to 100.
 - `-h, --help`: Prints help information.
 - `-V, --version`: Prints version information.
 

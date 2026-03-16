@@ -18,9 +18,9 @@ mod parsers;
 mod report;
 
 use parsers::definitions::{ElfParser, Symbol};
+use parsers::goblin::GoblinParser;
 use parsers::native::NativeParser;
 use parsers::nm::NmParser;
-use parsers::goblin::GoblinParser;
 use report::SymbolDiff;
 
 #[derive(Parser, Debug)]

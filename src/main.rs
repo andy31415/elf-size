@@ -10,8 +10,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 mod parsers;
 mod report;
 
-use crate::parsers::{create_parser, definitions::{Symbol, SymbolKind}};
-use report::{generate_report, OutputType, ReportData, SymbolDiff};
+use crate::parsers::{
+    create_parser,
+    definitions::{Symbol, SymbolKind},
+};
+use report::{OutputType, ReportData, SymbolDiff, generate_report};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -102,12 +105,24 @@ fn main() -> Result<()> {
     tracing::info!("Starting elf-diff with command: {:?}", cli.command);
 
     match cli.command {
-        Commands::Compare { from, to, output_type, hide_read_only, demangle, parser, max_symbol_width } => {
-            run_compare(from, to, output_type, hide_read_only, demangle, &parser, max_symbol_width)
-        }
-        Commands::Show { elf_file, symbols } => {
-            run_show(elf_file, symbols)
-        }
+        Commands::Compare {
+            from,
+            to,
+            output_type,
+            hide_read_only,
+            demangle,
+            parser,
+            max_symbol_width,
+        } => run_compare(
+            from,
+            to,
+            output_type,
+            hide_read_only,
+            demangle,
+            &parser,
+            max_symbol_width,
+        ),
+        Commands::Show { elf_file, symbols } => run_show(elf_file, symbols),
     }
 }
 
@@ -125,14 +140,20 @@ fn run_compare(
 
     tracing::info!("Using {} parser", parser_name);
 
-    let from_path = from.to_str().ok_or_else(|| eyre::eyre!("FROM path is not valid UTF-8: {}", from.display()))?;
-    let mut from_symbols = from_parser.get_symbols(from_path).map_err(|e| eyre::eyre!(e))?;
+    let from_path = from
+        .to_str()
+        .ok_or_else(|| eyre::eyre!("FROM path is not valid UTF-8: {}", from.display()))?;
+    let mut from_symbols = from_parser
+        .get_symbols(from_path)
+        .map_err(|e| eyre::eyre!(e))?;
     if demangle {
         from_symbols.iter_mut().for_each(|s| s.demangle());
     }
     tracing::debug!("Symbols from FROM file: {:?}", from_symbols.len());
 
-    let to_path = to.to_str().ok_or_else(|| eyre::eyre!("TO path is not valid UTF-8: {}", to.display()))?;
+    let to_path = to
+        .to_str()
+        .ok_or_else(|| eyre::eyre!("TO path is not valid UTF-8: {}", to.display()))?;
     let mut to_symbols = to_parser.get_symbols(to_path).map_err(|e| eyre::eyre!(e))?;
     if demangle {
         to_symbols.iter_mut().for_each(|s| s.demangle());
@@ -145,11 +166,15 @@ fn run_compare(
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 
-    generate_report(&mut handle, &ReportData {
-        diffs: &diffs,
-        output_type,
-        include_total: true, // This was previously conditional, fixed to true
-    }, max_symbol_width)?;
+    generate_report(
+        &mut handle,
+        &ReportData {
+            diffs: &diffs,
+            output_type,
+            include_total: true, // This was previously conditional, fixed to true
+        },
+        max_symbol_width,
+    )?;
 
     Ok(())
 }
@@ -165,7 +190,9 @@ fn run_diff(
     let mut diffs = Vec::new();
 
     for (name, symbol1) in &map1 {
-        if hide_read_only && (symbol1.kind == SymbolKind::Code || symbol1.kind == SymbolKind::RoData) {
+        if hide_read_only
+            && (symbol1.kind == SymbolKind::Code || symbol1.kind == SymbolKind::RoData)
+        {
             continue;
         }
 
@@ -201,7 +228,9 @@ fn run_diff(
     }
 
     for (name, symbol2) in &map2 {
-        if hide_read_only && (symbol2.kind == SymbolKind::Code || symbol2.kind == SymbolKind::RoData) {
+        if hide_read_only
+            && (symbol2.kind == SymbolKind::Code || symbol2.kind == SymbolKind::RoData)
+        {
             continue;
         }
         if !map1.contains_key(name) {
@@ -221,7 +250,10 @@ fn run_diff(
 }
 
 fn run_show(elf_file: PathBuf, symbols: Vec<String>) -> Result<()> {
-    println!("Showing disassembly for {:?} in file {:?}", symbols, elf_file);
+    println!(
+        "Showing disassembly for {:?} in file {:?}",
+        symbols, elf_file
+    );
     // TODO: Implement disassembly logic
     Ok(())
 }

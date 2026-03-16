@@ -46,7 +46,11 @@ pub struct ReportData<'a> {
     pub include_total: bool,
 }
 
-pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData, max_symbol_width: usize) -> Result<()> {
+pub fn generate_report<W: Write>(
+    writer: &mut W,
+    data: &ReportData,
+    max_symbol_width: usize,
+) -> Result<()> {
     let mut sorted_diffs = data.diffs.to_vec();
     sorted_diffs.sort_by(|a, b| {
         kind_sort_order(&a.kind)

@@ -1,5 +1,5 @@
+use prettytable::{Cell, Row, Table, row, format};
 use eyre::{Context, Result};
-use prettytable::{Cell, Row, Table, row};
 use std::io::Write;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -38,6 +38,7 @@ pub fn generate_report<W: Write>(
     match output_type {
         OutputType::Table => {
             let mut table = Table::new();
+            table.set_format(*format::consts::FORMAT_CLEAN);
             table.add_row(row!["Type", "Size Diff", "Symbol"]);
 
             for diff in diffs {

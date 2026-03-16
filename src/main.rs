@@ -121,7 +121,6 @@ fn main() -> Result<()> {
             });
         }
     }
-
     tracing::info!("Generated {} diffs", diffs.len());
 
     let stdout = io::stdout();
@@ -141,11 +140,7 @@ fn main() -> Result<()> {
         },
     };
 
-    report::generate_report(&mut handle, diffs, args.output, max_symbol_width)?;
-
-    tracing::info!("Report generated successfully");
-
-    Ok(())
+    report::generate_report(&mut handle, diffs, args.output, max_symbol_width)
 }
 
 // Add this to allow clap to parse OutputType

@@ -22,23 +22,31 @@ impl std::fmt::Display for ChangeType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OutputType {
     Table,
     Csv,
 }
 
-pub fn generate_report<W: Write>(
-    writer: &mut W,
-    mut diffs: Vec<SymbolDiff>,
-    output_type: OutputType,
-    include_total: bool,
-) -> Result<()> {
-    diffs.sort_by_key(|d| d.size_diff);
+pub struct ReportData<'a> {
+    pub diffs: &'a [SymbolDiff],
+    pub output_type: OutputType,
+    pub include_total: bool,
+}
 
-    tracing::debug!("Generating report with type: {:?}", output_type);
+pub fn generate_report<W: Write>(writer: &mut W, data: &ReportData) -> Result<()> {
+    let mut sorted_diffs = data.diffs.to_vec();
+    sorted_diffs.sort_by_key(|d| d.size_diff);
 
-    match output_type {
+    let total_diff: i64 = sorted_diffs.iter().map(|d| d.size_diff).sum();
+
+    tracing::debug!(
+        "Generating report with type: {:?}, include_total: {}",
+        data.output_type,
+        data.include_total
+    );
+
+    match data.output_type {
         OutputType::Table => {
             let mut table = Table::new();
             let terminal_width = terminal_size().map(|(TermWidth(w), _)| w).unwrap_or(120);
@@ -68,9 +76,7 @@ pub fn generate_report<W: Write>(
             }
             // Note: No constraint on Symbol column, width is handled by manual truncation.
 
-            let total_diff: i64 = diffs.iter().map(|d| d.size_diff).sum();
-
-            for diff in diffs {
+            for diff in &sorted_diffs {
                 let symbol_name = if diff.name.len() > symbol_width as usize {
                     if symbol_width > 3 {
                         format!("{}...", &diff.name[..symbol_width as usize - 3])
@@ -87,7 +93,7 @@ pub fn generate_report<W: Write>(
                 ]);
             }
 
-            if include_total {
+            if data.include_total {
                 table.add_row(vec![
                     Cell::new("TOTAL").add_attribute(Attribute::Bold),
                     Cell::new(total_diff.to_string())
@@ -102,13 +108,17 @@ pub fn generate_report<W: Write>(
             let mut wtr = csv::Writer::from_writer(writer);
             wtr.write_record(["Type", "Size Diff", "Symbol"])
                 .context("Failed to write CSV header")?;
-            for diff in diffs {
+            for diff in &sorted_diffs {
                 wtr.write_record(&[
                     diff.change_type.to_string(),
                     diff.size_diff.to_string(),
-                    diff.name,
+                    diff.name.clone(),
                 ])
                 .context("Failed to write CSV record")?;
+            }
+            if data.include_total {
+                wtr.write_record(&["TOTAL", &total_diff.to_string(), ""])
+                    .context("Failed to write CSV total")?;
             }
             wtr.flush().context("Failed to flush CSV writer")?;
         }

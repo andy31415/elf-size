@@ -24,8 +24,13 @@ struct Args {
     #[arg(value_name = "FILE2")]
     file2: PathBuf,
 
-    #[arg(short, long, value_enum, default_value_t = report::OutputType::Table)]
-    output: report::OutputType,
+    /// Output format
+    #[arg(short, long, value_parser = ["table", "csv"], default_value = "table")]
+    output: String,
+
+    /// Whether to include a total row in the output
+    #[arg(long, value_parser = ["yes", "no"], default_value = "yes")]
+    include_total: String,
 
     /// Disable C++ symbol demangling
     #[arg(long, action)]
@@ -33,10 +38,6 @@ struct Args {
 
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
-
-    /// Include a total row in table output
-    #[arg(long, value_parser = ["yes", "no"])]
-    include_total: Option<String>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -126,38 +127,21 @@ fn main() -> Result<()> {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 
-    let include_total_bool = match args.include_total.as_deref() {
-        Some("yes") => true,
-        Some("no") => false,
-        None => matches!(args.output, report::OutputType::Table),
-        Some(_) => unreachable!(), // Clap should prevent this
+    let output_type = match args.output.as_str() {
+        "table" => report::OutputType::Table,
+        "csv" => report::OutputType::Csv,
+        _ => unreachable!(), // Clap should prevent this
     };
 
-    report::generate_report(&mut handle, diffs, args.output, include_total_bool)
+    let include_total = args.include_total == "yes";
+
+    let report_data = report::ReportData {
+        diffs: &diffs,
+        output_type,
+        include_total,
+    };
+
+    report::generate_report(&mut handle, &report_data)
 }
 
-// Add this to allow clap to parse OutputType
-impl std::str::FromStr for report::OutputType {
-    type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "table" => Ok(report::OutputType::Table),
-            "csv" => Ok(report::OutputType::Csv),
-            _ => Err(format!("Invalid output type: {}", s)),
-        }
-    }
-}
-
-impl clap::ValueEnum for report::OutputType {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[report::OutputType::Table, report::OutputType::Csv]
-    }
-
-    fn to_possible_value<'a>(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            report::OutputType::Table => clap::builder::PossibleValue::new("table"),
-            report::OutputType::Csv => clap::builder::PossibleValue::new("csv"),
-        })
-    }
-}

@@ -6,8 +6,8 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::FmtSubscriber;
 
 mod parsers;
 mod report;
@@ -17,7 +17,7 @@ use crate::parsers::{
     definitions::{Symbol, SymbolKind},
 };
 use regex::Regex;
-use report::{OutputType, ReportData, SymbolDiff, generate_report};
+use report::{generate_report, OutputType, ReportData, SymbolDiff};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -381,19 +381,27 @@ fn run_show(
 
                 tracing::info!("Running command: {:?}", command);
 
-                let objdump_output = command.output()?;
+                let objdump_child = command.stdout(std::process::Stdio::piped()).spawn()?;
+                let objdump_stdout = objdump_child
+                    .stdout
+                    .ok_or_else(|| eyre::eyre!("Failed to get objdump stdout"))?;
 
-                if objdump_output.status.success() {
-                    let stdout = String::from_utf8_lossy(&objdump_output.stdout);
+                let cxxfilt_child = std::process::Command::new("c++filt")
+                    .stdin(objdump_stdout)
+                    .stdout(std::process::Stdio::piped())
+                    .spawn()?;
+
+                let output = cxxfilt_child.wait_with_output()?;
+
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
                     if stdout.trim().is_empty() {
-                        tracing::info!("No disassembly output for this range.");
-                        println!("  (No disassembly output for this range)");
-                    } else {
-                        println!("{}", stdout);
+                        eyre::bail!("No disassembly output for this range");
                     }
+                    println!("{}", stdout);
                 } else {
-                    let stderr = String::from_utf8_lossy(&objdump_output.stderr);
-                    eyre::bail!("objdump failed:\n{}", stderr)
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eyre::bail!("c++filt failed:\n{}", stderr)
                 }
             }
             _ => {

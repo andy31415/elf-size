@@ -171,6 +171,9 @@ fn main() -> Result<()> {
     }
     tracing::info!("Generated {} diffs", diffs.len());
 
+    // Sort diffs by symbol name for consistent output
+    diffs.sort_by(|a, b| a.name.cmp(&b.name));
+
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 

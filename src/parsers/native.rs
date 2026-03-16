@@ -59,7 +59,6 @@ impl ElfParser for NativeParser {
             symbols.len(),
             file_path
         );
-        symbols.sort_by(|a, b| b.size.cmp(&a.size));
         Ok(symbols)
     }
 }

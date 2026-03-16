@@ -1,4 +1,4 @@
-use crate::elf_parser::SymbolKind;
+use crate::parsers::definitions::SymbolKind;
 
 fn kind_sort_order(kind: &SymbolKind) -> usize {
     match kind {

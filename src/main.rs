@@ -13,10 +13,12 @@ enum ParserType {
     Native,
 }
 
-mod elf_parser;
+mod parsers;
 mod report;
 
-use elf_parser::{ElfParser, NativeParser, NmParser, Symbol, demangle_symbols};
+use parsers::definitions::{ElfParser, Symbol};
+use parsers::native::NativeParser;
+use parsers::nm::NmParser;
 use report::SymbolDiff;
 
 #[derive(Parser, Debug)]
@@ -98,7 +100,9 @@ fn main() -> Result<()> {
         .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from FROM file: {:?}", symbols1.len());
     if !args.no_demangle {
-        demangle_symbols(&mut symbols1);
+        for s in &mut symbols1 {
+            s.demangle();
+        }
     }
 
     let mut symbols2 = parser
@@ -110,7 +114,9 @@ fn main() -> Result<()> {
         .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from TO file: {:?}", symbols2.len());
     if !args.no_demangle {
-        demangle_symbols(&mut symbols2);
+        for s in &mut symbols2 {
+            s.demangle();
+        }
     }
 
     let map1: HashMap<&str, &Symbol> = symbols1.iter().map(|s| (s.name.as_str(), s)).collect();

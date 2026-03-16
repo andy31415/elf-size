@@ -1,11 +1,11 @@
 use clap::Parser;
+use eyre::Result;
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 use tracing_subscriber::util::SubscriberInitExt;
-use eyre::Result;
 
 mod elf_parser;
 mod report;
@@ -80,10 +80,15 @@ fn main() -> Result<()> {
         match map2.get(name) {
             Some(symbol2) => {
                 if symbol1.size != symbol2.size {
-                    tracing::trace!("Symbol CHANGED: {} ({} -> {})", name, symbol1.size, symbol2.size);
+                    tracing::trace!(
+                        "Symbol CHANGED: {} ({} -> {})",
+                        name,
+                        symbol1.size,
+                        symbol2.size
+                    );
                     diffs.push(SymbolDiff {
                         name: (*name).to_string(),
-                        change_type: "CHANGED".to_string(),
+                        change_type: report::ChangeType::Changed,
                         size_diff: symbol1.size as i64 - symbol2.size as i64,
                     });
                 } else {
@@ -94,7 +99,7 @@ fn main() -> Result<()> {
                 tracing::trace!("Symbol REMOVED: {} ({})", name, symbol1.size);
                 diffs.push(SymbolDiff {
                     name: (*name).to_string(),
-                    change_type: "REMOVED".to_string(),
+                    change_type: report::ChangeType::Removed,
                     size_diff: symbol1.size as i64,
                 });
             }
@@ -106,7 +111,7 @@ fn main() -> Result<()> {
             tracing::trace!("Symbol ADDED: {} ({})", name, symbol2.size);
             diffs.push(SymbolDiff {
                 name: (*name).to_string(),
-                change_type: "ADDED".to_string(),
+                change_type: report::ChangeType::Added,
                 size_diff: -(symbol2.size as i64),
             });
         }

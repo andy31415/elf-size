@@ -1,6 +1,6 @@
+use eyre::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;
-use eyre::{Context, Result, bail};
 
 pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>> {
     tracing::debug!("Getting symbol sizes for file: {:?}", file_path);
@@ -41,11 +41,10 @@ pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>>
         let symbol_type = parts[2].chars().next().unwrap_or('?');
         let mut name = parts[3].to_string();
 
-        if demangle
-            && let Ok(demangled) = rustc_demangle::try_demangle(&name) {
-                name = demangled.to_string();
-                tracing::trace!("Demangled {} to {}", parts[3], name);
-            }
+        if demangle && let Ok(demangled) = rustc_demangle::try_demangle(&name) {
+            name = demangled.to_string();
+            tracing::trace!("Demangled {} to {}", parts[3], name);
+        }
 
         symbols.push(Symbol {
             name,

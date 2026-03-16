@@ -27,8 +27,9 @@ struct Args {
     #[arg(short, long, value_enum, default_value_t = report::OutputType::Table)]
     output: report::OutputType,
 
+    /// Disable C++ symbol demangling
     #[arg(long, action)]
-    demangle: bool,
+    no_demangle: bool,
 
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     log_level: LogLevel,
@@ -66,9 +67,9 @@ fn main() -> Result<()> {
 
     tracing::info!("Starting elf-diff with args: {:?}", args);
 
-    let symbols1 = elf_parser::get_symbol_sizes(&args.file1, args.demangle)?;
+    let symbols1 = elf_parser::get_symbol_sizes(&args.file1, !args.no_demangle)?;
     tracing::debug!("Symbols from file1: {:?}", symbols1.len());
-    let symbols2 = elf_parser::get_symbol_sizes(&args.file2, args.demangle)?;
+    let symbols2 = elf_parser::get_symbol_sizes(&args.file2, !args.no_demangle)?;
     tracing::debug!("Symbols from file2: {:?}", symbols2.len());
 
     let map1: HashMap<&str, &Symbol> = symbols1.iter().map(|s| (s.name.as_str(), s)).collect();

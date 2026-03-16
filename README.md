@@ -25,7 +25,7 @@ elf-diff [OPTIONS] <FILE1> <FILE2>
 - `-o, --output <OUTPUT>`: Sets the output format.  
   - `table` (default): Prints a formatted table to the console.  
   - `csv`: Prints the output in CSV format.
-- `-d, --demangle`: Demangles the symbol names before comparison.
+- `--no-demangle`: Disables C++ symbol demangling (demangling is enabled by default).
 - `-h, --help`: Prints help information.
 - `-V, --version`: Prints version information.
 

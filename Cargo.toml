@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-rustc-demangle = "0.1.23"
+cpp_demangle = "0.4"
 csv = "1.3.0"
 prettytable-rs = "0.10.0"
 eyre = "0.6.12"

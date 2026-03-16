@@ -26,13 +26,14 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Compare symbols between two ELF files
+    #[command(alias = "c")]
     Compare {
         /// The base ELF file
-        #[arg(short, long)]
+        #[arg(index = 1)]
         from: PathBuf,
 
         /// The target ELF file
-        #[arg(short, long)]
+        #[arg(index = 2)]
         to: PathBuf,
 
         /// Output format
@@ -56,6 +57,7 @@ enum Commands {
         max_symbol_width: usize,
     },
     /// Show disassembly for symbols in an ELF file
+    #[command(alias = "s")]
     Show {
         /// The ELF file to inspect
         #[arg(index = 1)]

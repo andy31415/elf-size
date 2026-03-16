@@ -46,17 +46,15 @@ pub fn get_symbol_sizes(file_path: &Path, demangle: bool) -> Result<Vec<Symbol>>
 
         if demangle {
             match cpp_demangle::Symbol::new(name.as_bytes()) {
-                Ok(symbol) => {
-                    match symbol.demangle(&DemangleOptions::default()) {
-                        Ok(demangled) => {
-                            name = demangled;
-                            tracing::trace!("Demangled {} to {}", parts[3], name);
-                        }
-                        Err(_) => {
-                            tracing::trace!("Demangling failed for {}, using original name", parts[3]);
-                        }
+                Ok(symbol) => match symbol.demangle(&DemangleOptions::default()) {
+                    Ok(demangled) => {
+                        name = demangled;
+                        tracing::trace!("Demangled {} to {}", parts[3], name);
                     }
-                }
+                    Err(_) => {
+                        tracing::trace!("Demangling failed for {}, using original name", parts[3]);
+                    }
+                },
                 Err(_) => {
                     tracing::trace!("Failed to parse symbol {}, using original name", parts[3]);
                 }

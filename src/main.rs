@@ -16,7 +16,7 @@ enum ParserType {
 mod elf_parser;
 mod report;
 
-use elf_parser::{demangle_symbols, ElfParser, NativeParser, NmParser, Symbol};
+use elf_parser::{ElfParser, NativeParser, NmParser, Symbol, demangle_symbols};
 use report::SymbolDiff;
 
 #[derive(Parser, Debug)]
@@ -89,13 +89,25 @@ fn main() -> Result<()> {
 
     tracing::info!("Using {:?} parser", args.parser);
 
-    let mut symbols1 = parser.get_symbols(args.from.to_str().ok_or_else(|| eyre::eyre!("Invalid FROM path"))?).map_err(|e| eyre::eyre!(e))?;
+    let mut symbols1 = parser
+        .get_symbols(
+            args.from
+                .to_str()
+                .ok_or_else(|| eyre::eyre!("Invalid FROM path"))?,
+        )
+        .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from FROM file: {:?}", symbols1.len());
     if !args.no_demangle {
         demangle_symbols(&mut symbols1);
     }
 
-    let mut symbols2 = parser.get_symbols(args.to.to_str().ok_or_else(|| eyre::eyre!("Invalid TO path"))?).map_err(|e| eyre::eyre!(e))?;
+    let mut symbols2 = parser
+        .get_symbols(
+            args.to
+                .to_str()
+                .ok_or_else(|| eyre::eyre!("Invalid TO path"))?,
+        )
+        .map_err(|e| eyre::eyre!(e))?;
     tracing::debug!("Symbols from TO file: {:?}", symbols2.len());
     if !args.no_demangle {
         demangle_symbols(&mut symbols2);

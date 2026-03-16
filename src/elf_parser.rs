@@ -16,7 +16,9 @@ pub struct NmParser {
 
 impl Default for NmParser {
     fn default() -> Self {
-        NmParser { nm_path: "nm".to_string() }
+        NmParser {
+            nm_path: "nm".to_string(),
+        }
     }
 }
 
@@ -98,7 +100,8 @@ impl ElfParser for NativeParser {
         tracing::debug!("Getting symbol sizes for file (native): {:?}", path);
         let file_path = Path::new(path);
         let bin_data = fs::read(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
-        let obj_file = object::File::parse(&*bin_data).map_err(|e| format!("Failed to parse ELF file: {}", e))?;
+        let obj_file = object::File::parse(&*bin_data)
+            .map_err(|e| format!("Failed to parse ELF file: {}", e))?;
         let mut symbols = Vec::new();
 
         for symbol in obj_file.symbols() {

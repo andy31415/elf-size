@@ -6,8 +6,8 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 use tracing::Level;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::util::SubscriberInitExt;
 
 mod parsers;
 mod report;
@@ -17,7 +17,7 @@ use crate::parsers::{
     definitions::{Symbol, SymbolKind},
 };
 use regex::Regex;
-use report::{generate_report, OutputType, ReportData, SymbolDiff};
+use report::{OutputType, ReportData, SymbolDiff, generate_report};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -84,10 +84,6 @@ enum Commands {
         /// Path to the objdump binary to use
         #[arg(long, default_value = "objdump")]
         objdump: String,
-
-        /// Interleave source code with disassembly (requires debug info)
-        #[arg(long, default_value_t = false)]
-        source: bool,
     },
 }
 
@@ -147,8 +143,7 @@ fn main() -> Result<()> {
             demangle,
             parser,
             objdump,
-            source,
-        } => run_show(elf_file, symbols, demangle, &parser, &objdump, source),
+        } => run_show(elf_file, symbols, demangle, &parser, &objdump),
     }
 }
 
@@ -301,7 +296,6 @@ fn run_show(
     demangle: bool,
     parser_name: &str,
     objdump_path: &str,
-    show_source: bool,
 ) -> Result<()> {
     let chosen_objdump = if objdump_path == "objdump" {
         match get_arch_default_objdump(&elf_file) {
@@ -370,11 +364,8 @@ fn run_show(
                 println!("  Address: 0x{:x}, Size: {}", start_addr, symbol.size);
 
                 let mut command = std::process::Command::new(&chosen_objdump);
-                if show_source {
-                    command.arg("-S");
-                } else {
-                    command.arg("-d");
-                }
+                command.arg("-S");
+                command.arg("-d");
                 command.arg(format!("--start-address={}", start_addr));
                 command.arg(format!("--stop-address={}", end_addr));
                 command.arg(&elf_file);
